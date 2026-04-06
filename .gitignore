@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+data/*.parquet
+data/*.csv
+output/*
+!output/.gitkeep
+.pgpass
