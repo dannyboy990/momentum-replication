@@ -1,0 +1,9 @@
+wrds>=3.1.2
+pandas>=2.0
+numpy>=1.24
+statsmodels>=0.14
+scipy>=1.10
+matplotlib>=3.7
+pandas-datareader>=0.10
+pyarrow>=12.0
+linearmodels>=5.3
