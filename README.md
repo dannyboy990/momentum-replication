@@ -99,11 +99,16 @@ T+1 DiD (portfolio, t=-4 vs t=-3):       ~+84.7 bps (t ~ 2.5)
 Small discrepancies (<10%) may arise from CRSP data vintage updates. The Internet
 Appendix discusses sensitivity to construction choices.
 
+## Links
+
+- **Paper (SSRN):** https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6426026
+- **Author website:** https://www.danielrnathan.com
+
 ## Citation
 
 ```
 Nathan, D., Suominen, M., and Tasa, J. (2026). The Intramonth Momentum Cycle.
-Working Paper.
+Working Paper. Available at SSRN: https://ssrn.com/abstract=6426026
 ```
 
 ## Contact
