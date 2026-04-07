@@ -1,8 +1,9 @@
 """
 01_pull_crsp.py — WRDS Data Pull
 
-Connects to WRDS, pulls CRSP daily and monthly stock files,
-applies standard filters, saves as parquet.
+Connects to WRDS, pulls CRSP daily and monthly stock files using the
+CIZ Flat File Format 2.0 tables, applies filters matching the paper's
+Internet Appendix Section IA.1, saves as parquet.
 
 Input:  WRDS credentials (set WRDS_USERNAME in config.py)
 Output: data/crsp_daily.parquet, data/crsp_monthly.parquet
@@ -16,7 +17,21 @@ import pandas as pd
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import WRDS_USERNAME, DATA_DIR, START_DATE, END_DATE
+from config import WRDS_USERNAME, DATA_DIR
+
+
+# ── CRSP CIZ filter values (Internet Appendix IA.1) ─────────────────────
+# These replicate the exact sample restrictions in the paper.
+CIZ_FILTERS = """
+    h.sharetype = 'NS'
+    AND h.securitytype = 'EQTY'
+    AND h.securitysubtype = 'COM'
+    AND h.usincflg = 'Y'
+    AND h.issuertype IN ('ACOR', 'CORP')
+    AND h.primaryexch IN ('N', 'A', 'Q')
+    AND h.conditionaltype = 'RW'
+    AND h.tradingstatusflg = 'A'
+"""
 
 
 def connect_wrds():
@@ -37,69 +52,97 @@ def connect_wrds():
         sys.exit(1)
 
 
-def pull_monthly(db):
-    """Pull CRSP monthly stock file for momentum ranking."""
-    print("\nPulling CRSP monthly file (crsp.msf + crsp.msenames)...")
-    t0 = time.time()
-
-    # Monthly returns with exchange/share type from header
-    query = f"""
-        SELECT a.permno, a.date, a.ret, a.prc, a.shrout,
-               b.exchcd, b.shrcd
-        FROM crsp.msf AS a
-        INNER JOIN crsp.msenames AS b
-            ON a.permno = b.permno
-            AND a.date >= b.namedt
-            AND a.date <= b.nameendt
-        WHERE a.date >= '{START_DATE}'
-          AND a.date <= '{END_DATE}'
-          AND b.exchcd IN (1, 2, 3)
-          AND b.shrcd IN (10, 11)
-    """
-    df = db.raw_sql(query, date_cols=["date"])
-
-    # Basic cleaning
-    df = df.dropna(subset=["ret"])
-    df["me"] = df["prc"].abs() * df["shrout"]  # market equity (in $000s)
-    df = df.dropna(subset=["me"])
-    df = df[df["me"] > 0]
-
-    # Exclude penny stocks (price < $1 at time of observation)
-    df = df[df["prc"].abs() >= 1.0]
-
-    elapsed = time.time() - t0
-    print(f"  Pulled {len(df):,} monthly observations ({elapsed:.0f}s)")
-    return df
-
-
 def pull_daily(db):
-    """Pull CRSP daily stock file."""
-    print("\nPulling CRSP daily file (crsp.dsf)...")
-    print("  This is a large download (~73M rows). Please be patient.")
+    """
+    Pull CRSP daily stock data using CIZ format tables.
+
+    Tables:
+      crsp.stkdlysecuritydata  — daily returns, prices, volume
+      crsp.stksecurityinfohdr  — security header for sample filters
+
+    Filters match Internet Appendix Section IA.1 exactly.
+    Date range starts at 1978-12-29 to allow momentum signal construction
+    (12-month lookback) for holding months beginning January 1980.
+    """
+    print("\nPulling CRSP daily file (CIZ format)...")
+    print("  This is a large download. Please be patient.")
     t0 = time.time()
 
     query = f"""
-        SELECT a.permno, a.date, a.ret, a.prc, a.shrout, a.vol
-        FROM crsp.dsf AS a
-        INNER JOIN crsp.msenames AS b
-            ON a.permno = b.permno
-            AND a.date >= b.namedt
-            AND a.date <= b.nameendt
-        WHERE a.date >= '{START_DATE}'
-          AND a.date <= '{END_DATE}'
-          AND b.exchcd IN (1, 2, 3)
-          AND b.shrcd IN (10, 11)
+        SELECT d.permno,
+               d.dlycaldt AS date,
+               d.dlyret AS ret,
+               d.dlyretx AS retx,
+               d.dlyprc AS prc,
+               d.dlyprevcap AS prevcap,
+               d.dlycap AS cap,
+               d.dlyvol AS vol,
+               d.dlybid AS bid,
+               d.dlyask AS ask,
+               d.dlynumtrd AS numtrd,
+               d.dlyprcvol AS prcvol,
+               d.dlyretmissflg AS retmissflg,
+               h.primaryexch AS exchcd
+        FROM crsp.stkdlysecuritydata AS d
+        INNER JOIN crsp.stksecurityinfohist AS h
+            ON d.permno = h.permno
+            AND d.dlycaldt >= h.secinfostartdt
+            AND d.dlycaldt <= h.secinfoenddt
+        WHERE d.dlycaldt >= '1978-12-29'
+          AND d.dlycaldt <= '2025-12-31'
+          AND {CIZ_FILTERS}
     """
     df = db.raw_sql(query, date_cols=["date"])
 
-    # Basic cleaning
-    df = df.dropna(subset=["ret"])
+    # Exclude observations with missing-return flags per IA.1
+    bad_flags = {'MV', 'NS', 'NT', 'RA', 'GP', 'MP', 'DG', 'DM', 'DP'}
+    if "retmissflg" in df.columns:
+        mask = df["retmissflg"].isna() | ~df["retmissflg"].str.strip().isin(bad_flags)
+        n_before = len(df)
+        df = df[mask]
+        print(f"  Excluded {n_before - len(df):,} rows with bad DlyRetMissFlg")
 
-    # Market cap for value-weighting
-    df["me"] = df["prc"].abs() * df["shrout"]
+    df = df.dropna(subset=["ret"])
 
     elapsed = time.time() - t0
     print(f"  Pulled {len(df):,} daily observations ({elapsed:.0f}s)")
+    print(f"  Date range: {df['date'].min()} to {df['date'].max()}")
+    print(f"  Unique permnos: {df['permno'].nunique():,}")
+    return df
+
+
+def pull_monthly(db):
+    """
+    Pull CRSP monthly stock data using CIZ format tables.
+    Used for momentum signal construction and portfolio formation.
+    """
+    print("\nPulling CRSP monthly file (CIZ format)...")
+    t0 = time.time()
+
+    query = f"""
+        SELECT m.permno,
+               m.mthcaldt AS date,
+               m.mthret AS ret,
+               m.mthprc AS prc,
+               m.mthcap AS cap,
+               m.mthprevcap AS prevcap,
+               h.primaryexch AS exchcd
+        FROM crsp.stkmthsecuritydata AS m
+        INNER JOIN crsp.stksecurityinfohist AS h
+            ON m.permno = h.permno
+            AND m.mthcaldt >= h.secinfostartdt
+            AND m.mthcaldt <= h.secinfoenddt
+        WHERE m.mthcaldt >= '1978-12-01'
+          AND m.mthcaldt <= '2025-12-31'
+          AND {CIZ_FILTERS}
+    """
+    df = db.raw_sql(query, date_cols=["date"])
+    df = df.dropna(subset=["ret"])
+
+    elapsed = time.time() - t0
+    print(f"  Pulled {len(df):,} monthly observations ({elapsed:.0f}s)")
+    print(f"  Date range: {df['date'].min()} to {df['date'].max()}")
+    print(f"  Unique permnos: {df['permno'].nunique():,}")
     return df
 
 

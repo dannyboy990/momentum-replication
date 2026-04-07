@@ -2,18 +2,19 @@
 
 **Daniel Nathan, Matti Suominen, and Joni Tasa (2026)**
 
-This package reproduces the core results from "The Intramonth Momentum Cycle." The paper shows that 64% of momentum (Winners Minus Losers) profits concentrate in six trading days before month-end (t=-9 to t=-4). The effect is driven entirely by loser stocks and is consistent with institutional selling to meet month-end redemptions. The main causal identification exploits the SEC's T+1 settlement reform of May 28, 2024.
+This package reproduces all tables and figures from "The Intramonth Momentum Cycle." The paper shows that 64% of momentum (Winners Minus Losers) profits concentrate in six trading days before month-end (t=-9 to t=-4). The effect is driven entirely by loser stocks and is consistent with institutional selling to meet month-end redemptions.
 
 ## Requirements
 
-- **Python 3.9+**
-- **WRDS subscription** with CRSP access (daily + monthly stock files). Most university finance departments have this. See https://wrds-www.wharton.upenn.edu.
+- **Python 3.9+** with packages in `requirements.txt`
+- **Stata 17+** with `reghdfe`, `ftools`, `estout` (install via `ssc install`)
+- **WRDS subscription** with CRSP access (daily + monthly stock files)
 - ~5 GB disk space for data files
 
 ## Setup
 
 ```bash
-git clone https://github.com/[your-repo]/momentum-replication.git
+git clone https://github.com/dannyboy990/momentum-replication.git
 cd momentum-replication
 pip install -r requirements.txt
 ```
@@ -25,79 +26,78 @@ WRDS_USERNAME = "your_wrds_username"
 
 ## Execution
 
-Run scripts in order:
+### Step 1: Data construction (Python)
 
 ```bash
-python src/01_pull_crsp.py        # Download CRSP data from WRDS (~20-40 min)
-python src/02_build_portfolios.py # Build momentum portfolios (~10 min)
-python src/03_performance.py      # Cumulative wealth, alphas (~2 min)
-python src/04_did_t1.py           # T+1 settlement DiD (~5 min)
-python src/05_december.py         # December falsification (~1 min)
-python src/06_tables_figures.py   # Summary and verification
+python src/01_pull_crsp.py      # Download CRSP from WRDS (~20-40 min)
+python src/02_build_panel.py    # Build portfolios + CSV panels (~15 min)
 ```
 
-Script 01 requires a WRDS connection (internet access + credentials). Scripts 02-06 run offline using the downloaded data.
+### Step 2: Analysis (Stata)
+
+Open `code/stata/00_replicate.do` in Stata. Set the `$root` global to this directory:
+```stata
+global root "/path/to/momentum-replication"
+```
+
+Then run:
+```stata
+do "code/stata/00_replicate.do"
+```
+
+Estimated runtime: 3-4 hours (dominated by `reghdfe` on ~53M observations).
 
 ## What This Reproduces
 
-| Result | Script | Description |
-|--------|--------|-------------|
-| Figure 1 | 03 | Cumulative wealth: PreTOM vs rest vs full WML |
-| Table 1 | 03 | Summary statistics and factor alphas |
-| Table 7 | 04 | T+1 settlement difference-in-differences |
-| Figure 5 | 04 | Selling migration: pre vs post T+1 reform |
-| Table 10 | 05 | December depletion by calendar month |
-| Figure A4 | 05 | December falsification bar chart |
+**All tables and figures in the paper**, including:
 
-## Expected Output
+| Output | Stata code | Description |
+|--------|-----------|-------------|
+| Table 1 | `_tables_vw.do` | Baseline stock-level regressions (firm + date FE) |
+| Table 2 | `_table2_bas_contemp.do` | Bid-ask spread interaction |
+| Table 4 | `_vw_excrash.do` | Post-window reversal |
+| Table 6 | `_taq_tables.do` | TAQ selling pressure (requires TAQ data) |
+| Table 7 | `_t1_did_earlymonth_control.do` | T+1 settlement DiD |
+| Figures 1-8 | `_figures_*.do` | All main paper figures |
+| Figures A1-A4 | `_appendix_*.do` | Appendix figures |
 
-After running all scripts, `output/` will contain:
-
-```
-output/
-  momentum_daily.csv           # Portfolio-level daily returns (safe to share)
-  table_performance.csv        # Summary statistics
-  table_alphas.csv             # FF3 alpha regressions
-  table_did_t1.csv             # DiD regression results
-  table_december.csv           # Month-by-month loser PreTOM returns
-  fig_cumulative_wealth.pdf    # Three-line cumulative wealth plot
-  fig_selling_migration.pdf    # Pre/post T+1 loser return by trading day
-  fig_december.pdf             # Bar chart by calendar month
-```
-
-## Verification
-
-The final script prints key numbers that should match the paper:
-
-```
-Full WML cumulative wealth:       $45.89
-PreTOM cumulative wealth:         $18.11
-Complementary cumulative wealth:  $2.53
-Loser-PreTOM mean (bps/day):      -7.3
-Loser-PreTOM t-stat:              -2.95
-DiD coefficient (bps):            +46.8
-DiD t-stat:                       3.01
-December Loser-PreTOM t-stat:     0.28
-September Loser-PreTOM t-stat:    -3.36
-```
-
-Small discrepancies (within 10%) are expected due to CRSP data vintage updates, exact treatment of delistings, and breakpoint computation details. The Internet Appendix of the paper discusses sensitivity to these choices.
-
-## Full Replication
-
-This package covers the core portfolio-level and settlement results. The complete paper includes additional analyses that require:
-- **TAQ** intraday data (WRDS Intraday Indicators) for selling pressure tests
-- **Thomson S12** mutual fund holdings for Bartik IV instruments
-- **Compustat Global** for international evidence
-
-These datasets require separate WRDS subscriptions. The full replication code (Stata + Python) is available upon request.
+See the header of `00_replicate.do` for the complete table/figure-to-code mapping.
 
 ## Data Notes
 
 - **No proprietary data is distributed.** All data is pulled from WRDS at runtime.
-- `momentum_daily.csv` in the output directory contains portfolio-level daily returns (aggregated across hundreds of stocks per decile). This is safe to share and comparable to data on Ken French's website.
-- Momentum portfolios use **fixed monthly sorting** (decile assignments held constant within each calendar month), not daily rebalancing as in French's online data.
-- NYSE breakpoints: only NYSE-listed stocks determine decile cutoffs; all stocks are then assigned.
+- Python scripts construct the exact panel described in Internet Appendix Section IA.1:
+  CRSP CIZ Flat File Format 2.0, common-stock filters, trading-day expansion,
+  12-2 daily momentum with validity checks, French NYSE breakpoints.
+
+### What requires additional data
+
+The following sections of `00_replicate.do` require datasets beyond the CRSP pull.
+The code is included; the data must be constructed separately with the appropriate
+WRDS subscriptions. Sections that fail due to missing data do not affect other sections.
+
+| Section | Data needed | WRDS subscription |
+|---------|------------|-------------------|
+| Table 6 (TAQ selling pressure) | `taq_panel_2003_2022.csv` | WRDS TAQ Intraday Indicators |
+| Table 10 (Dividends) | `dividend_ts_full.csv`, `divfreq_pretom_v2.csv` | CRSP distributions |
+| Table 11 (Fresh/stale losers) | `loser_freshstale.csv` | JKP characteristics |
+| Table 12 (International) | `compustat_intl_pooled_v3.csv` | Compustat Global |
+| Figure 8 (Flow pressure) | Bartik instrument data | Thomson S12, CRSP MF |
+
+## Expected Output
+
+After running both Python and Stata scripts, key numbers should match:
+
+```
+Full WML cumulative wealth (1980-2025):  ~$45.89
+PreTOM cumulative wealth:                ~$18.11
+Complementary cumulative wealth:         ~$2.53
+Loser-PreTOM VW (stock-level):           ~-7.15 bps/day (t ~ -3.08)
+T+1 DiD (portfolio, t=-4 vs t=-3):       ~+84.7 bps (t ~ 2.5)
+```
+
+Small discrepancies (<10%) may arise from CRSP data vintage updates. The Internet
+Appendix discusses sensitivity to construction choices.
 
 ## Citation
 

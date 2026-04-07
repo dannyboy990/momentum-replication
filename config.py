@@ -3,7 +3,7 @@
 # The Intramonth Momentum Cycle
 # Nathan, Suominen, and Tasa (2026)
 
-WRDS_USERNAME = "your_wrds_username"
+WRDS_USERNAME = "dnathan"
 
 DATA_DIR = "data/"
 OUTPUT_DIR = "output/"
