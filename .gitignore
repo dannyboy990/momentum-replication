@@ -3,6 +3,7 @@ __pycache__/
 data/*.parquet
 data/*.csv
 data/*.dta
+!data/momentum_daily.dta
 output/*
 !output/.gitkeep
 .pgpass
