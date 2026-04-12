@@ -229,4 +229,79 @@ foreach thresh in 100 200 300 {
 
 di _n "{hline 80}"
 
+* ==============================================================================
+* Robustness: exclude famous momentum crash episodes
+*   2001 DM cluster: Daniel-Moskowitz (2016) Table 2 months marked with ‡:
+*                    Jan 2001, Oct 2001, Nov 2001, Nov 2002
+*   2009 DM episode: Daniel-Moskowitz (2016) March-May 2009
+*   COVID:           February-May 2020
+* Numbers reported in paper Section 5.3 footnote.
+* ==============================================================================
+
+di _n "{hline 80}"
+di "ROBUSTNESS: Crash-day concentration excluding famous episodes"
+di "{hline 80}"
+
+cap gen ym_m = mofd(date)
+format ym_m %tm
+
+gen byte famous = 0
+replace famous = 1 if ym_m == tm(2001m1) | ym_m == tm(2001m10) | ///
+                      ym_m == tm(2001m11) | ym_m == tm(2002m11)
+replace famous = 1 if ym_m == tm(2009m3) | ym_m == tm(2009m4) | ym_m == tm(2009m5)
+replace famous = 1 if ym_m == tm(2020m2) | ym_m == tm(2020m3) | ///
+                      ym_m == tm(2020m4) | ym_m == tm(2020m5)
+
+qui count if wml_bps < -200
+local n_all = r(N)
+qui count if wml_bps < -200 & famous == 1
+local n_fam = r(N)
+di "Full sample crashes (WML < -200): " `n_all'
+di "  of which in famous episodes:   " `n_fam'
+di "  remaining after exclusion:     " `n_all' - `n_fam'
+
+qui count if famous == 0
+local N_total = r(N)
+qui count if famous == 0 & window == 1
+local share_1 = r(N) / `N_total'
+qui count if famous == 0 & window == 2
+local share_2 = r(N) / `N_total'
+qui count if famous == 0 & window == 3
+local share_3 = r(N) / `N_total'
+
+di _n "Ex-famous calendar shares: PreTOM=" %4.1f `share_1'*100 ///
+    "% MStart=" %4.1f `share_2'*100 "% Other=" %4.1f `share_3'*100 "%"
+
+foreach thresh in 100 200 300 {
+    qui count if wml_bps < -`thresh' & famous == 0
+    local n_crash = r(N)
+    di _n "Ex-famous: WML < -`thresh' bps (N = `n_crash' crash days)"
+
+    foreach w in 1 2 3 {
+        qui count if wml_bps < -`thresh' & famous == 0 & window == `w'
+        local actual = r(N)
+        local p_obs = `actual' / `n_crash'
+        local p_exp = `share_`w''
+        local z = (`p_obs' - `p_exp') / sqrt(`p_exp' * (1 - `p_exp') / `n_crash')
+        local pval = 2 * (1 - normal(abs(`z')))
+
+        local wname "PreTOM"
+        if `w' == 2 local wname "Month-start"
+        if `w' == 3 local wname "Other"
+
+        local stars ""
+        if `pval' < 0.10 local stars "*"
+        if `pval' < 0.05 local stars "**"
+        if `pval' < 0.01 local stars "***"
+
+        di %20s "`wname'" ///
+            "  p_obs=" %5.1f `p_obs'*100 "%" ///
+            "  p_exp=" %5.1f `p_exp'*100 "%" ///
+            "  z=" %6.2f `z' ///
+            "  p=" %6.4f `pval' " `stars'"
+    }
+}
+
+di _n "{hline 80}"
+
 log close
