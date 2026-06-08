@@ -1,5 +1,5 @@
 """
-_build_momentum_daily.py — Build momentum_daily.dta from CRSP parquet
+_build_momentum_daily.py - Build momentum_daily.dta from CRSP parquet
 
 Constructs daily VW and EW portfolio returns for momentum deciles 1 (losers)
 and 10 (winners) using fixed monthly sorting from crsp_1927-2025_fixed_sorting_full.parquet.
@@ -24,7 +24,7 @@ import numpy as np
 if len(sys.argv) > 1:
     root = sys.argv[1]
 else:
-    root = r"C:\Users\danie\Dropbox\Timing Momentum"
+    root = r"."
 
 data_dir = os.path.join(root, "data")
 parquet_path = os.path.join(data_dir, "crsp_1927-2025_fixed_sorting_full.parquet")

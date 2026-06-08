@@ -33,6 +33,36 @@ python run_imc.py
 
 The bundled `momentum_daily.dta` is a pre-computed *aggregate* of CRSP loser/winner/WML portfolio returns, the same kind of object Kenneth French publishes daily on his website. It is not licensed CRSP micro-data. With it, anyone can reproduce Figures 1-8 and A1-A4 from the paper.
 
+## Rebuild the full panel from raw data (Python + WRDS)
+
+The data pipeline is pure Python — from raw CRSP/TAQ pulls to the analysis tables. Stata is needed only for the stock-level panel regressions (next section).
+
+```bash
+# 1. Pull raw inputs from WRDS (needs a WRDS account with CRSP + TAQ access)
+python pull_data.py --what all
+
+# 2. Build the fixed-monthly-sorting panel (CRSP + TAQ -> one parquet)
+python build_panel.py
+
+# 3. Reproduce the analysis layer from the panel
+python imc.py all
+```
+
+`imc.py` is a single-file pipeline with subcommands:
+
+| Command | Output |
+|---|---|
+| `python imc.py build` | `data/momentum_daily.dta` from the panel parquet |
+| `python imc.py headline` | cumulative-wealth figure + console summary (same as `run_imc.py`) |
+| `python imc.py tc` | transaction-cost decomposition (Internet Appendix) |
+| `python imc.py holding` | holding-period decomposition (Internet Appendix) |
+| `python imc.py all` | all of the above, in order |
+
+- **`pull_data.py`** issues the WRDS queries (CRSP daily, TAQ Intraday Indicators, S&P 500 membership) and downloads the Ken French momentum breakpoints. The queries follow the CRSP CIZ flat-file schema; verify table and column names against your own WRDS access before running.
+- **`build_panel.py`** constructs the fixed-monthly-sorting decile panel — NYSE Prior 2-12 breakpoints, lagged market-cap weights, bid-ask spreads, S&P 500 flag, Fama-French factors, and the Lee-Ready TAQ merge — following Internet Appendix Section IA.1, and writes `data/crsp_fixed_sorting_panel.parquet`.
+
+The large files (the ~4 GB panel parquet, the per-table CSVs) are git-ignored; only the small aggregate `momentum_daily.dta` is bundled so the headline runs out of the box. The full rebuild additionally needs `polars`, `wrds`, and `requests` (see `requirements.txt`).
+
 ## Reproduce every table and figure in the paper (Stata + WRDS)
 
 The full pipeline runs every regression in `00_replicate.do` against a stock-level panel of ~53M observations. This requires CRSP and Stata.
@@ -40,8 +70,8 @@ The full pipeline runs every regression in `00_replicate.do` against a stock-lev
 ### Requirements
 
 - **Stata 17+** with `reghdfe`, `ftools`, `estout` (`ssc install`)
-- **CRSP via WRDS**, used to construct the stock-level panel `crsp_1927-2025_fixed_sorting_full.parquet` (4.1 GB, fixed monthly momentum decile assignments). The construction is described in Internet Appendix Section IA.1.
-- **Python 3.9+ with pyarrow** for parquet → CSV extraction (the bundled `code/stata/_build_momentum_daily.py` rebuilds `momentum_daily.dta` from the parquet, and `00_replicate.do` Step 2 extracts CSV panels for the regressions)
+- **CRSP via WRDS**, used to construct the stock-level panel `crsp_fixed_sorting_panel.parquet` (~4 GB, fixed monthly momentum decile assignments) via the Python rebuild above. The construction is described in Internet Appendix Section IA.1.
+- **Python 3.9+** — `00_replicate.do` Step 2 extracts the CSV panels for the regressions from that parquet.
 
 ### Run
 
@@ -84,10 +114,32 @@ Losers Rest mean:                    +5.51 bps/day  (t =  +2.50)
 PreTOM-only cumulative wealth:       $18.78
 Full WML cumulative wealth:          $44.46
 Rest-of-month cumulative wealth:     $ 2.37
-T+1 DiD (portfolio, t=-4 vs t=-3):   +84.72 bps     (t = +2.80)
 ```
 
-These match the paper's portfolio-level numbers exactly. Small discrepancies (<10%) versus the published paper for stock-level regressions arise from CRSP vintage updates.
+These match the paper's portfolio-level numbers exactly. The T+1 settlement difference-in-differences (Table 7) and the stock-level regressions are reproduced by the Stata pipeline below. Small discrepancies (<10%) versus the published paper for stock-level regressions arise from CRSP vintage updates.
+
+## Python translation of the table regressions (experimental)
+
+For users who would rather not install Stata, `imc_tables.py` provides an **AI-assisted** Python translation of the stock-level table regressions, using `pyfixest` for the firm + date fixed-effects / two-way-clustered specification.
+
+As a demonstration, **only the first table (Table 1, the baseline) is implemented and run.** On the authoritative panel it reproduces the Stata coefficients exactly (EW Loser$\times$PreTOM $= -2.550$, VW $= -7.151$). The remaining tables follow the same pattern but are not translated.
+
+```bash
+python imc_tables.py
+```
+
+We **cannot vouch that this Python translation matches the Stata output in every case** — it was produced with AI assistance and only Table 1 was checked. The Stata code in `code/stata/` remains the **authoritative** source for every number in the paper.
+
+## Data provenance and licensing
+
+The only data file in this repository is `data/momentum_daily.dta` — a daily series of value- and equal-weighted winner/loser/WML momentum-decile **portfolio returns** plus the Fama-French factors, 1927-2025. It is an aggregate, comparable to the portfolio return series Kenneth French publishes, and contains **no licensed micro-data**.
+
+This repository does **not** contain or redistribute any proprietary data. In particular:
+- no CRSP, TAQ, or Compustat micro-data;
+- **no commercial mutual-fund-flow data — no Morningstar, no EPFR, no daily fund-flow series;**
+- no Thomson/Refinitiv holdings.
+
+`pull_data.py` and `build_panel.py` are the code that *downloads and constructs* the stock-level panel from WRDS. Running them requires your own WRDS subscription with the relevant entitlements (CRSP, TAQ); the data files they produce are git-ignored and are never committed to this repository.
 
 ## Citation
 

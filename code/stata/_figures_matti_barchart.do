@@ -66,7 +66,7 @@ collapse (sum) lr_winners_ma_win lr_losers_ma_win lr_wml_ma_win ///
                lr_winners_ma_rest lr_losers_ma_rest lr_wml_ma_rest ///
                ndays_win ndays_rest, by(ym yr)
 
-* Convert to simple returns (bps) — monthly compounded
+* Convert to simple returns (bps) - monthly compounded
 foreach v in winners_ma losers_ma wml_ma {
     gen r_`v'_win  = (exp(lr_`v'_win)  - 1) * 10000
     gen r_`v'_rest = (exp(lr_`v'_rest) - 1) * 10000

@@ -159,7 +159,7 @@ graph export "$output\appendix_profile_subperiod.pdf", replace as(pdf)
 graph export "$output\appendix_profile_subperiod.png", replace as(png) width(2400)
 
 di _n "{hline 60}"
-di "DONE — Appendix subperiod figures"
+di "DONE - Appendix subperiod figures"
 di "{hline 60}"
 
 log close

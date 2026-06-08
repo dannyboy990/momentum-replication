@@ -7,7 +7,7 @@
 clear all
 set more off
 
-if "$root" == "" global root "C:\Users\danie\Dropbox\Timing Momentum"
+if "$root" == "" global root "."
 global data    "$root/data"
 global code    "$root/code/stata"
 global output  "$root/output"
@@ -31,13 +31,27 @@ keep if yr >= 1980
 gen ym = mofd(date)
 format ym %tm
 
-* ret_rf already in CSV (decimal); convert to bps
-replace ret_rf = ret_rf * 10000
+* Merge daily Mkt-RF and build market-adjusted excess return (r_i - Mkt) in
+* basis points, matching the dep-var symbol r_i - r^m in the table notes.
+* With firm + date FE, slopes are mathematically identical whether the LHS is
+* r_i - rf or r_i - Mkt (the per-date constant rf is absorbed by the date FE),
+* so this rename does not move any reported coefficient.
+preserve
+    use "$root/data/momentum_daily.dta", clear
+    keep date mktrf
+    tempfile mkt
+    save `mkt'
+restore
+merge m:1 date using `mkt', keep(match master) nogen
+
+gen ret_mkt = (ret_rf - mktrf) * 10000
+label var ret_mkt "Daily market-adjusted return r_i - Mkt (bps)"
+drop ret_rf mktrf
 rename loser l
 
 cap drop pretom
 gen pretom = (t >= -9 & t <= -4)
-gen post   = (t >= 1 & t <= 3)
+gen post   = (t >= -3 & t <= 3)
 gen lp     = l * pretom
 gen l_post = l * post
 
@@ -63,47 +77,72 @@ di _n "{hline 70}"
 di "FULL SAMPLE (for comparison)"
 di "{hline 70}"
 
-reghdfe ret_rf l lp l_post [aw=w_l1], absorb(permno date) cluster(permno date)
+reghdfe ret_mkt l lp l_post [aw=w_l1], absorb(permno date) cluster(permno date)
 estimates store full
 
 test lp = l_post
 di "lp=l_post: F=" %6.2f r(F) " p=" %6.4f r(p)
 
-test 6*lp + 3*l_post = 0
+test 6*lp + 7*l_post = 0
 local f_fullrev = r(F)
 local p_fullrev = r(p)
-di "Full reversal (6*lp+3*l_post=0): F=" %6.2f `f_fullrev' " p=" %6.4f `p_fullrev'
+di "Full reversal (6*lp+7*l_post=0): F=" %6.2f `f_fullrev' " p=" %6.4f `p_fullrev'
 
 * ── Write table_reversal_vw.tex ─────────────────────────────────────────
-local tabfile "$root/paper/Tables/table_reversal_vw.tex"
-esttab full using "`tabfile'", replace ///
-    cells(b(fmt(3)) se(par fmt(3))) ///
-    keep(l lp l_post) ///
-    varlabels(l "Loser" lp "Loser \$\\times\$ PreTOM" l_post "Loser \$\\times\$ Post") ///
-    stats(N r2_within, fmt(%12.0fc %6.4f) labels("Observations" "Within \$R^2\$")) ///
-    starlevels(\sym{*} 0.10 \sym{**} 0.05 \sym{***} 0.01) ///
-    title("Partial Reversal of PreTOM Loser Underperformance") ///
-    label booktabs ///
-    mtitles("Full Sample") ///
-    prehead("\begin{table}[htbp]\centering" ///
-            "\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}" ///
-            "\caption{Partial Reversal of PreTOM Loser Underperformance}" ///
-            "\label{tab:reversal}") ///
-    postfoot("\midrule" ///
-             "\multicolumn{2}{p{0.95\textwidth}}{\footnotesize \textit{Notes.}" ///
-             "Dependent variable is daily excess return in basis points." ///
-             "Loser equals one for bottom-decile momentum stocks (fixed monthly sorting)." ///
-             "PreTOM equals one during trading days \$T{-}9\$ to \$T{-}4\$ relative to month-end (\$T = 0\$)." ///
-             "Post equals one during trading days \$T{+}1\$ to \$T{+}3\$ (month-start)." ///
-             "Reversal test: \$6 \times \beta_{\text{PreTOM}} + 3 \times \beta_{\text{Post}} = 0\$:" ///
-             "\$F =\$ `=string(`f_fullrev', "%5.2f")'" ///
-             "(\$p =\$ `=string(`p_fullrev', "%5.4f")')." ///
-             "Value-weighted (lagged market cap). Firm and date fixed effects." ///
-             "Standard errors (in parentheses) clustered by firm and date." ///
-             "\sym{*} \$p<0.10\$, \sym{**} \$p<0.05\$, \sym{***} \$p<0.01\$.}\\" ///
-             "\bottomrule" ///
-             "\end{tabular}" ///
-             "\end{table}")
+local tabfile "$output/table_reversal_vw.tex"
+* Reversal table
+qui run "$code/_polish_cells.do"
+estimates restore full
+pcell l
+local bL "`r(b)'"
+local tL "`r(t)'"
+pcell lp
+local bP "`r(b)'"
+local tP "`r(t)'"
+pcell l_post
+local bPo "`r(b)'"
+local tPo "`r(t)'"
+commaN e(N)
+local Nr "`r(n)'"
+local Rr = strtrim(string(e(r2_within),"%5.4f"))
+
+tempname fh
+file open `fh' using "`tabfile'", write replace
+file write `fh' "\begin{table}[htbp]\centering" _n
+file write `fh' "\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}" _n
+file write `fh' "\caption{Partial Reversal of PreTOM Loser Underperformance}" _n
+file write `fh' "\label{tab:reversal}" _n
+file write `fh' "\begin{tabular}{ld}" _n
+file write `fh' "\toprule" _n
+file write `fh' "                    &\multicolumn{1}{c}{(1)}\\" _n
+file write `fh' "                    &\multicolumn{1}{c}{Full Sample}\\" _n
+file write `fh' "\midrule" _n
+file write `fh' "Loser               & `bL'           \\" _n
+file write `fh' "                    & `tL'        \\" _n
+file write `fh' "Loser \$\times\$ PreTOM& `bP'  \\" _n
+file write `fh' "                    & `tP'       \\" _n
+file write `fh' "Loser \$\times\$ Post & `bPo'           \\" _n
+file write `fh' "                    & `tPo'        \\" _n
+file write `fh' "\midrule" _n
+file write `fh' "Fixed effects       & {Stock, Date}   \\" _n
+file write `fh' "Observations        & {`Nr'}\\" _n
+file write `fh' "Within \$R^2\$        & {`Rr'}        \\" _n
+file write `fh' "\bottomrule" _n
+file write `fh' "\end{tabular}" _n
+file write `fh' "" _n
+file write `fh' "\vspace{0.4em}" _n
+file write `fh' "\begin{minipage}{\textwidth}" _n
+file write `fh' "\footnotesize \textit{Notes.}" _n
+file write `fh' "Dependent variable is the daily market-adjusted return (\$r_{i,t} - r^m_t\$, in excess of the value-weighted CRSP market return), in basis points." _n
+file write `fh' "Loser equals one for bottom-decile momentum stocks (fixed monthly sorting)." _n
+file write `fh' "PreTOM equals one during trading days \$\tau{-}9\$ to \$\tau{-}4\$ relative to month-end (\$\tau\$ is the last trading day)." _n
+file write `fh' "Post equals one during trading days \$\tau{-}3\$ to \$\tau{+}3\$ (month-end)." _n
+file write `fh' "Returns are value-weighted (lagged market cap). All specifications include stock and date fixed effects." _n
+file write `fh' "\$t\$-statistics are in parentheses; standard errors are two-way clustered by stock and date." _n
+file write `fh' "\sym{*} \$p<0.10\$, \sym{**} \$p<0.05\$, \sym{***} \$p<0.01\$." _n
+file write `fh' "\end{minipage}" _n
+file write `fh' "\end{table}" _n
+file close `fh'
 di "  → Wrote: `tabfile'"
 
 * ── Ex-crash sample ──────────────────────────────────────────────────────
@@ -112,17 +151,17 @@ di _n "{hline 70}"
 di "EX-CRASH SAMPLE"
 di "{hline 70}"
 
-reghdfe ret_rf l lp l_post [aw=w_l1] if crash == 0, absorb(permno date) cluster(permno date)
+reghdfe ret_mkt l lp l_post [aw=w_l1] if crash == 0, absorb(permno date) cluster(permno date)
 
 test lp = l_post
 local f_eq = r(F)
 local p_eq = r(p)
 di "lp=l_post: F=" %6.2f `f_eq' " p=" %6.4f `p_eq'
 
-test 6*lp + 3*l_post = 0
+test 6*lp + 7*l_post = 0
 local f_rev = r(F)
 local p_rev = r(p)
-di "Full reversal (6*lp+3*l_post=0): F=" %6.2f `f_rev' " p=" %6.4f `p_rev'
+di "Full reversal (6*lp+7*l_post=0): F=" %6.2f `f_rev' " p=" %6.4f `p_rev'
 
 * ── Crash-only sample (to see what crashes do) ───────────────────────────
 
@@ -130,6 +169,6 @@ di _n "{hline 70}"
 di "CRASH-ONLY SAMPLE"
 di "{hline 70}"
 
-reghdfe ret_rf l lp l_post [aw=w_l1] if crash == 1, absorb(permno date) cluster(permno date)
+reghdfe ret_mkt l lp l_post [aw=w_l1] if crash == 1, absorb(permno date) cluster(permno date)
 
 log close

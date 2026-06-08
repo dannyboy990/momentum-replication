@@ -1,7 +1,7 @@
 /*==============================================================================
   _figures_matti_cumwml.do
 
-  Cumulative WML wealth figures for Matti presentation.
+  Cumulative WML wealth figures.
   Three PDFs: 1926-2025, 1960-2025, 1980-2025.
   Each shows: window-only WML, full WML, rest-of-month WML.
 

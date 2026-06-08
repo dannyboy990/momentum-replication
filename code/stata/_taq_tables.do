@@ -17,7 +17,7 @@
 clear all
 set more off
 
-if "$root" == "" global root "C:\Users\danie\Dropbox\Timing Momentum"
+if "$root" == "" global root "."
 global data    "$root/data"
 global code    "$root/code/stata"
 global output  "$root/output"
@@ -58,7 +58,7 @@ di "inst_nsp_within      = inst50k_net_sell_pressure_volume_within     [inst >50
 di "inst_share           = inst50k_share_volume                        [inst >50K]"
 
 * ==============================================================================
-* TABLE 12 — Date FE only
+* TABLE 12 - Date FE only
 * ==============================================================================
 
 di _n "{hline 80}"
@@ -82,7 +82,7 @@ reghdfe inst_nsp_within loser lp, absorb(date) cluster(permno date)
 estimates store t12_c4
 
 * ==============================================================================
-* TABLE 13 — Firm + Date FE
+* TABLE 13 - Firm + Date FE
 * ==============================================================================
 
 di _n "{hline 80}"

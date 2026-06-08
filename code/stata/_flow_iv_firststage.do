@@ -4,10 +4,10 @@
   First stage: Does Bartik predict selective loser selling during PreTOM?
 
   Two versions:
-    (A) Contemporaneous flows (original — has timing problem, flows are
+    (A) Contemporaneous flows (original - has timing problem, flows are
         realized end-of-month, after PreTOM)
     (B) Lagged flows (prior-month outflows predict current-month PreTOM)
-        — this is the clean instrument
+        - this is the clean instrument
 
   The 2x2 test:
                     PreTOM              Rest of month
@@ -27,7 +27,7 @@
 clear all
 set more off
 
-if "$root" == "" global root "C:\Users\danie\Dropbox\Timing Momentum"
+if "$root" == "" global root "."
 global data    "$root/data"
 global code    "$root/code/stata"
 global output  "$root/output"
@@ -83,13 +83,13 @@ merge m:1 permno ym using `instruments', keep(1 3) nogen
 qui count if z_bartik != .
 di "  Z_bartik (contemporaneous) non-missing: " r(N)
 
-* Lagged instrument (prior-month outflows — clean version)
+* Lagged instrument (prior-month outflows - clean version)
 qui count if z_bartik_lag != .
 di "  Z_bartik_lag (lagged) non-missing: " r(N)
 
 
 /*======================================================================
-  PANEL A: LAGGED BARTIK (clean instrument — prior-month outflows)
+  PANEL A: LAGGED BARTIK (clean instrument - prior-month outflows)
 ======================================================================*/
 
 di _n "================================================================"
@@ -153,7 +153,7 @@ estimates store lag_cell_wr
 
 * Summary tables (lagged)
 di _n "================================================================"
-di "SUMMARY: Lagged Bartik — Individual cells"
+di "SUMMARY: Lagged Bartik - Individual cells"
 di "================================================================"
 
 esttab lag_cell_lp lag_cell_wp lag_cell_lr lag_cell_wr, ///
@@ -175,7 +175,7 @@ esttab lag_full, ///
     title("Lagged Bartik -> NSP: Full 2x2 (single regression)") ///
     nonotes
 
-* LaTeX (lagged — main table for paper)
+* LaTeX (lagged - main table for paper)
 esttab lag_cell_lp lag_cell_wp lag_cell_lr lag_cell_wr ///
     using "$output/flow_iv_firststage_2x2_lagged.tex", replace ///
     keep(zL_lp zL_wp zL_lr zL_wr) ///
@@ -187,11 +187,11 @@ esttab lag_cell_lp lag_cell_wp lag_cell_lr lag_cell_wr ///
 
 
 /*======================================================================
-  PANEL B: CONTEMPORANEOUS BARTIK (original — for comparison only)
+  PANEL B: CONTEMPORANEOUS BARTIK (original - for comparison only)
 ======================================================================*/
 
 di _n "================================================================"
-di "PANEL B: CONTEMPORANEOUS BARTIK (original — timing problem)"
+di "PANEL B: CONTEMPORANEOUS BARTIK (original - timing problem)"
 di "================================================================"
 di "WARNING: Flows are same-month as outcome. Shown for comparison only."
 

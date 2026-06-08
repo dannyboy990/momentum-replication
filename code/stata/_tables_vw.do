@@ -10,7 +10,7 @@
 clear all
 set more off
 
-if "$root" == "" global root "C:\Users\danie\Dropbox\Timing Momentum"
+if "$root" == "" global root "."
 global data    "$root/data"
 global code    "$root/code/stata"
 global output  "$root/output"
@@ -79,9 +79,24 @@ gen l_qtr     = loser * qtr_end
 gen l_dec     = loser * dec_month
 gen l_jan     = loser * jan_month
 
-* Rescale to bps
-replace ret_rf = ret_rf * 10000
-label var ret_rf "Daily excess return (bps)"
+* Merge daily Mkt-RF and convert LHS to market-adjusted excess return
+* (= r_i - Mkt, in basis points), matching the dep-var symbol r_i - r^m
+* used in the published table notes. With firm + date FE, slopes are
+* mathematically identical whether the LHS is r_i - rf or r_i - Mkt
+* (the per-date constant rf is absorbed by the date FE), so this rename
+* does not move any reported coefficient.
+preserve
+    use "$data/momentum_daily.dta", clear
+    keep date mktrf
+    rename date stata_date
+    tempfile mkt
+    save `mkt'
+restore
+merge m:1 stata_date using `mkt', keep(match master) nogen
+
+gen ret_mkt = (ret_rf - mktrf) * 10000
+label var ret_mkt "Daily market-adjusted return r_i - Mkt (bps)"
+drop ret_rf mktrf
 
 * Weight check
 bysort date decile: egen sum_w = total(w)
@@ -102,34 +117,68 @@ di "{hline 70}"
 eststo clear
 
 * EW
-eststo ew: reghdfe ret_rf loser lp, absorb(permno stata_date) cluster(permno stata_date)
+eststo ew: reghdfe ret_mkt loser lp, absorb(permno stata_date) cluster(permno stata_date)
 
 * VW
-eststo vw: reghdfe ret_rf loser lp [aw=w_l1], absorb(permno stata_date) cluster(permno stata_date)
+eststo vw: reghdfe ret_mkt loser lp [aw=w_l1], absorb(permno stata_date) cluster(permno stata_date)
 
-esttab ew vw using "$output\table1_baseline_vw.tex", replace ///
-    cells(b(fmt(3) star) se(fmt(3) par)) ///
-    star(* 0.10 ** 0.05 *** 0.01) ///
-    stats(N r2_within, fmt(%12.0fc %6.4f) labels("Observations" "Within \$R^2\$")) ///
-    mtitles("EW" "VW") ///
-    title("Baseline Window Effect on Daily Returns") ///
-    label booktabs ///
-    prehead("\begin{table}[htbp]\centering" ///
-            "\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}" ///
-            "\caption{Baseline Window Effect on Daily Returns}" ///
-            "\label{tab:baseline}") ///
-    postfoot("\midrule" ///
-            "\multicolumn{3}{p{0.95\textwidth}}{\footnotesize \textit{Notes.}" ///
-            "Dependent variable is daily excess return in basis points." ///
-            "Loser equals one for stocks in the bottom momentum decile." ///
-            "PreTOM equals one during the six-day pre-month-end window (trading days $t{-}9$ to $t{-}4$)." ///
-            "All specifications include firm and date fixed effects." ///
-            "Standard errors (in parentheses) are two-way clustered by firm and date." ///
-            "VW uses lagged market-capitalization weights within each decile-date cell." ///
-            "Sample: CRSP common stocks, 1980--2025.}\\" ///
-            "\bottomrule" ///
-            "\end{tabular}" ///
-            "\end{table}")
+* Table 1: baseline panel regression
+qui run "$code/_polish_cells.do"
+estimates restore vw
+pcell loser
+local b1v "`r(b)'"
+local t1v "`r(t)'"
+pcell lp
+local b2v "`r(b)'"
+local t2v "`r(t)'"
+commaN e(N)
+local Nv "`r(n)'"
+estimates restore ew
+pcell loser
+local b1e "`r(b)'"
+local t1e "`r(t)'"
+pcell lp
+local b2e "`r(b)'"
+local t2e "`r(t)'"
+commaN e(N)
+local Ne "`r(n)'"
+
+tempname fh
+file open `fh' using "$output\table1_baseline_vw.tex", write replace
+file write `fh' "\begin{table}[htbp]\centering" _n
+file write `fh' "\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}" _n
+file write `fh' "\caption{Loser PreTOM Underperformance: Baseline Panel Regression}" _n
+file write `fh' "\label{tab:baseline}" _n
+file write `fh' "\begin{tabular}{l*{2}{d}}" _n
+file write `fh' "\toprule" _n
+file write `fh' "                          &\multicolumn{1}{c}{(1)}&\multicolumn{1}{c}{(2)}\\" _n
+file write `fh' "                          &\multicolumn{1}{c}{VW}&\multicolumn{1}{c}{EW}\\" _n
+file write `fh' "\midrule" _n
+file write `fh' "Loser (\$\beta_{1}\$)                & `b1v'  & `b1e' \\" _n
+file write `fh' "                                   & `t1v'        & `t1e'       \\" _n
+file write `fh' "Loser \$\times\$ PreTOM (\$\beta_{2}\$)& `b2v' & `b2e'   \\" _n
+file write `fh' "                                   & `t2v'       & `t2e'      \\" _n
+file write `fh' "\midrule" _n
+file write `fh' "Sample                             & {1980--2025}    & {1980--2025}    \\" _n
+file write `fh' "Fixed effects                      & {Stock, Date}   & {Stock, Date}   \\" _n
+file write `fh' "Observations                       & {`Nv'}& {`Ne'}\\" _n
+file write `fh' "\bottomrule" _n
+file write `fh' "\end{tabular}" _n
+file write `fh' "" _n
+file write `fh' "\vspace{0.4em}" _n
+file write `fh' "\begin{minipage}{\textwidth}" _n
+file write `fh' "\footnotesize \textit{Notes.}" _n
+file write `fh' "Estimates of equation~(\ref{eq:baseline}) on the full CRSP panel of NYSE/AMEX/NASDAQ stocks, 1980--2025." _n
+file write `fh' "Dependent variable is the stock's daily excess return over the value-weighted CRSP market, \$\ExRet_{i,t} = r_{i,t} - r^{m}_{t}\$, in basis points." _n
+file write `fh' "\$\Loser_{i,t}\$ is an indicator equal to one if stock \$i\$ is in the bottom momentum decile on day \$t\$." _n
+file write `fh' "\$\PreTOM_{t}\$ is an indicator for the six trading days \$[\tau{-}9, \tau{-}4]\$ before month-end (\$\tau\$ is the last trading day)." _n
+file write `fh' "All specifications include stock and date fixed effects." _n
+file write `fh' "\$t\$-statistics are in parentheses; standard errors are two-way clustered by stock and date." _n
+file write `fh' "Column~1 weights observations by lagged market capitalization within decile-date." _n
+file write `fh' "\sym{*} \$p<0.10\$, \sym{**} \$p<0.05\$, \sym{***} \$p<0.01\$." _n
+file write `fh' "\end{minipage}" _n
+file write `fh' "\end{table}" _n
+file close `fh'
 
 
 /*----------------------------------------------------------------------
@@ -143,34 +192,72 @@ di "{hline 70}"
 eststo clear
 
 * Pre-2003 (equal split at July 2002)
-eststo pre03: reghdfe ret_rf loser lp [aw=w_l1] if stata_date < td(01jul2002), ///
+eststo pre03: reghdfe ret_mkt loser lp [aw=w_l1] if stata_date < td(01jul2002), ///
     absorb(permno stata_date) cluster(permno stata_date)
 
 * Post-2002
-eststo post02: reghdfe ret_rf loser lp [aw=w_l1] if stata_date >= td(01jul2002), ///
+eststo post02: reghdfe ret_mkt loser lp [aw=w_l1] if stata_date >= td(01jul2002), ///
     absorb(permno stata_date) cluster(permno stata_date)
 
-esttab pre03 post02 using "$output\table4_subperiod_vw.tex", replace ///
-    cells(b(fmt(3) star) se(fmt(3) par)) ///
-    star(* 0.10 ** 0.05 *** 0.01) ///
-    stats(N r2_within, fmt(%12.0fc %6.4f) labels("Observations" "Within \$R^2\$")) ///
-    mtitles("1980--2002" "2002--2025") ///
-    title("Subperiod Stability of the Window Effect") ///
-    label booktabs ///
-    prehead("\begin{table}[htbp]\centering" ///
-            "\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}" ///
-            "\caption{Subperiod Stability of the Window Effect}" ///
-            "\label{tab:subperiod}") ///
-    postfoot("\midrule" ///
-            "\multicolumn{3}{p{0.95\textwidth}}{\footnotesize \textit{Notes.}" ///
-            "Dependent variable is daily excess return in basis points." ///
-            "Value-weighted specifications throughout." ///
-            "Sample split at midpoint (July 2002)." ///
-            "All specifications include firm and date fixed effects." ///
-            "Standard errors (in parentheses) are two-way clustered by firm and date.}\\" ///
-            "\bottomrule" ///
-            "\end{tabular}" ///
-            "\end{table}")
+* Table 4: subperiod stability
+qui run "$code/_polish_cells.do"
+estimates restore pre03
+pcell loser
+local b1a "`r(b)'"
+local t1a "`r(t)'"
+pcell lp
+local b2a "`r(b)'"
+local t2a "`r(t)'"
+commaN e(N)
+local Na "`r(n)'"
+local r2a = strtrim(string(e(r2_within),"%5.4f"))
+estimates restore post02
+pcell loser
+local b1b "`r(b)'"
+local t1b "`r(t)'"
+pcell lp
+local b2b "`r(b)'"
+local t2b "`r(t)'"
+commaN e(N)
+local Nb "`r(n)'"
+local r2b = strtrim(string(e(r2_within),"%5.4f"))
+
+tempname fh
+file open `fh' using "$output\table4_subperiod_vw.tex", write replace
+file write `fh' "\begin{table}[htbp]\centering" _n
+file write `fh' "\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}" _n
+file write `fh' "\caption{Subperiod Stability of the PreTOM Effect}" _n
+file write `fh' "\label{tab:subperiod}" _n
+file write `fh' "\begin{tabular}{l*{2}{d}}" _n
+file write `fh' "\toprule" _n
+file write `fh' "            &\multicolumn{1}{c}{(1)}&\multicolumn{1}{c}{(2)}\\" _n
+file write `fh' "            &\multicolumn{1}{c}{1980--2002}&\multicolumn{1}{c}{2002--2025}\\" _n
+file write `fh' "\midrule" _n
+file write `fh' "Loser       & `b1a'           & `b1b'  \\" _n
+file write `fh' "            & `t1a'        & `t1b'        \\" _n
+file write `fh' "\addlinespace" _n
+file write `fh' "Loser \$\times\$ PreTOM& `b2a' & `b2b'  \\" _n
+file write `fh' "            & `t2a'       & `t2b'       \\" _n
+file write `fh' "\midrule" _n
+file write `fh' "Fixed effects& {Stock, Date}  & {Stock, Date}   \\" _n
+file write `fh' "Observations& {`Na'}& {`Nb'}\\" _n
+file write `fh' "Within \$R^2\$& {`r2a'}        & {`r2b'}        \\" _n
+file write `fh' "\bottomrule" _n
+file write `fh' "\end{tabular}" _n
+file write `fh' "" _n
+file write `fh' "\vspace{0.4em}" _n
+file write `fh' "\begin{minipage}{\textwidth}" _n
+file write `fh' "\footnotesize \textit{Notes.}" _n
+file write `fh' "Estimates of equation~(\ref{eq:baseline}) on subperiods. Dependent variable is the daily market-adjusted return (\$r_{i,t} - r^m_t\$, in excess of the value-weighted CRSP market return), in basis points." _n
+file write `fh' "Returns are value-weighted." _n
+file write `fh' "Sample split at midpoint (July 2002)." _n
+file write `fh' "All specifications include stock and date fixed effects." _n
+file write `fh' "\$t\$-statistics are in parentheses; standard errors are two-way clustered by stock and date." _n
+file write `fh' "Momentum deciles use NYSE breakpoints applied to all NYSE, AMEX, and NASDAQ stocks in CRSP; assignments are held constant within each calendar month." _n
+file write `fh' "\sym{*} \$p<0.10\$, \sym{**} \$p<0.05\$, \sym{***} \$p<0.01\$." _n
+file write `fh' "\end{minipage}" _n
+file write `fh' "\end{table}" _n
+file close `fh'
 
 
 /*----------------------------------------------------------------------
@@ -182,31 +269,113 @@ di "TABLE 5: Non-quarter-end VW"
 di "{hline 70}"
 
 eststo clear
+qui run "$code/_polish_cells.do"
+local bb = char(92) + char(92)   // literal LaTeX line break \\ inside \shortstack
 
-eststo nonqtr: reghdfe ret_rf loser lp [aw=w_l1] if non_qtr == 1, ///
-    absorb(permno stata_date) cluster(permno stata_date)
+* Table 5: window-dressing and tax-loss falsification (4 columns)
+* (1) Non-quarter-end months
+reghdfe ret_mkt loser lp [aw=w_l1] if non_qtr == 1, absorb(permno stata_date) cluster(permno stata_date)
+pcell loser
+local L1 "`r(b)'"
+local Lt1 "`r(t)'"
+pcell lp
+local P1 "`r(b)'"
+local Pt1 "`r(t)'"
+pcell _cons
+local C1 "`r(b)'"
+local Ct1 "`r(t)'"
+commaN e(N)
+local N1 "`r(n)'"
+local R1 = strtrim(string(e(r2_within),"%5.4f"))
+* (2) Non-December months
+reghdfe ret_mkt loser lp [aw=w_l1] if dec_month == 0, absorb(permno stata_date) cluster(permno stata_date)
+pcell loser
+local L2 "`r(b)'"
+local Lt2 "`r(t)'"
+pcell lp
+local P2 "`r(b)'"
+local Pt2 "`r(t)'"
+pcell _cons
+local C2 "`r(b)'"
+local Ct2 "`r(t)'"
+commaN e(N)
+local N2 "`r(n)'"
+local R2 = strtrim(string(e(r2_within),"%5.4f"))
+* (3) Full sample with quarter-end interactions
+reghdfe ret_mkt loser lp l_qtr lp_qtr [aw=w_l1], absorb(permno stata_date) cluster(permno stata_date)
+pcell loser
+local L3 "`r(b)'"
+local Lt3 "`r(t)'"
+pcell lp
+local P3 "`r(b)'"
+local Pt3 "`r(t)'"
+pcell l_qtr
+local LQ3 "`r(b)'"
+local LQt3 "`r(t)'"
+pcell lp_qtr
+local PQ3 "`r(b)'"
+local PQt3 "`r(t)'"
+pcell _cons
+local C3 "`r(b)'"
+local Ct3 "`r(t)'"
+commaN e(N)
+local N3 "`r(n)'"
+local R3 = strtrim(string(e(r2_within),"%5.4f"))
+* (4) Full sample baseline
+reghdfe ret_mkt loser lp [aw=w_l1], absorb(permno stata_date) cluster(permno stata_date)
+pcell loser
+local L4 "`r(b)'"
+local Lt4 "`r(t)'"
+pcell lp
+local P4 "`r(b)'"
+local Pt4 "`r(t)'"
+pcell _cons
+local C4 "`r(b)'"
+local Ct4 "`r(t)'"
+commaN e(N)
+local N4 "`r(n)'"
+local R4 = strtrim(string(e(r2_within),"%5.4f"))
 
-esttab nonqtr using "$output\table5_nonqtr_vw.tex", replace ///
-    cells(b(fmt(3) star) se(fmt(3) par)) ///
-    star(* 0.10 ** 0.05 *** 0.01) ///
-    stats(N r2_within, fmt(%12.0fc %6.4f) labels("Observations" "Within \$R^2\$")) ///
-    mtitles("Non-QE, VW") ///
-    title("Window Effect in Non-Quarter-End Months") ///
-    label booktabs ///
-    prehead("\begin{table}[htbp]\centering" ///
-            "\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}" ///
-            "\caption{Window Effect in Non-Quarter-End Months}" ///
-            "\label{tab:nonqtr}") ///
-    postfoot("\midrule" ///
-            "\multicolumn{2}{p{0.95\textwidth}}{\footnotesize \textit{Notes.}" ///
-            "Dependent variable is daily excess return in basis points." ///
-            "Value-weighted. Sample restricted to non-quarter-end months" ///
-            "(Jan, Feb, Apr, May, Jul, Aug, Oct, Nov)." ///
-            "All specifications include firm and date fixed effects." ///
-            "Standard errors (in parentheses) are two-way clustered by firm and date.}\\" ///
-            "\bottomrule" ///
-            "\end{tabular}" ///
-            "\end{table}")
+tempname fh
+file open `fh' using "$output\table5_nonqtr_vw.tex", write replace
+file write `fh' "\begin{table}[htbp]\centering" _n
+file write `fh' "\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}" _n
+file write `fh' "\caption{Window Dressing and Tax-Loss Falsification}" _n
+file write `fh' "\label{tab:nonqtr}" _n
+file write `fh' "\small" _n
+file write `fh' "\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l*{4}{d}}" _n
+file write `fh' "\toprule" _n
+file write `fh' "                                             & {(1)} & {(2)} & {(3)} & {(4)} \\" _n
+file write `fh' "                                             & {\shortstack{Non-QE`bb'months}} & {\shortstack{Non-December`bb'months}} & {\shortstack{Full sample,`bb'QE interaction}} & {\shortstack{Full sample`bb'baseline}} \\" _n
+file write `fh' "\midrule" _n
+file write `fh' "Loser                                        & `L1'  & `L2'   & `L3'  & `L4'   \\" _n
+file write `fh' "                                             & `Lt1'        & `Lt2'        & `Lt3'        & `Lt4'        \\" _n
+file write `fh' "\addlinespace" _n
+file write `fh' "Loser \$\times\$ PreTOM                        & `P1' & `P2' & `P3' & `P4' \\" _n
+file write `fh' "                                             & `Pt1'       & `Pt2'       & `Pt3'       & `Pt4'       \\" _n
+file write `fh' "\addlinespace" _n
+file write `fh' "Loser \$\times\$ QtrEnd                        & {}              & {}              & `LQ3'          & {}              \\" _n
+file write `fh' "                                             & {}              & {}              & `LQt3'       & {}              \\" _n
+file write `fh' "\addlinespace" _n
+file write `fh' "Loser \$\times\$ PreTOM \$\times\$ QtrEnd        & {}              & {}              & `PQ3'           & {}              \\" _n
+file write `fh' "                                             & {}              & {}              & `PQt3'        & {}              \\" _n
+file write `fh' "\addlinespace" _n
+file write `fh' "Constant                                     & `C1'  & `C2'          & `C3'  & `C4'   \\" _n
+file write `fh' "                                             & `Ct1'       & `Ct2'        & `Ct3'       & `Ct4'       \\" _n
+file write `fh' "\midrule" _n
+file write `fh' "Fixed effects                                & {Stock, Date}   & {Stock, Date}   & {Stock, Date}   & {Stock, Date}   \\" _n
+file write `fh' "Observations                                 & {`N1'}& {`N2'}& {`N3'}& {`N4'}\\" _n
+file write `fh' "Within \$R^2\$                                 & {`R1'}        & {`R2'}        & {`R3'}        & {`R4'}        \\" _n
+file write `fh' "\bottomrule" _n
+file write `fh' "\end{tabular*}" _n
+file write `fh' "" _n
+file write `fh' "\vspace{6pt}" _n
+file write `fh' "\noindent\begin{minipage}{\textwidth}" _n
+file write `fh' "\footnotesize \textit{Notes.}" _n
+file write `fh' "Dependent variable is the daily market-adjusted return (\$r_{i,t} - r^m_t\$, in excess of the value-weighted CRSP market return), in basis points. Returns are value-weighted using lagged market-capitalization weights. Column~(1) restricts the sample to non-quarter-end months (Jan, Feb, Apr, May, Jul, Aug, Oct, Nov); window dressing would be least relevant in these months, yet the Loser~\$\times\$~PreTOM coefficient is essentially identical to the full-sample estimate. Column~(2) restricts the sample to non-December months; tax-loss harvesting is most concentrated in December, and excluding it leaves the Loser~\$\times\$~PreTOM coefficient essentially unchanged. Column~(3) estimates the full sample with quarter-end interactions; QtrEnd equals one in March, June, September, December. The triple interaction Loser~\$\times\$~PreTOM~\$\times\$~QtrEnd is small and statistically indistinguishable from zero, indicating no quarter-end amplification. Column~(4) reproduces the full-sample baseline from Table~\ref{tab:baseline} of the main paper for reference. All specifications include stock and date fixed effects. \$t\$-statistics (in parentheses) are computed from standard errors two-way clustered by stock and date. Momentum deciles use NYSE breakpoints applied to all NYSE, AMEX, and NASDAQ stocks in CRSP; assignments are held constant within each calendar month. \sym{*} \$p<0.10\$, \sym{**} \$p<0.05\$, \sym{***} \$p<0.01\$. Sample: 1980--2025." _n
+file write `fh' "\end{minipage}" _n
+file write `fh' "\end{table}" _n
+file close `fh'
 
 
 /*----------------------------------------------------------------------
@@ -219,7 +388,7 @@ di "{hline 70}"
 
 eststo clear
 
-eststo qtramp: reghdfe ret_rf loser lp lp_qtr l_qtr [aw=w_l1], ///
+eststo qtramp: reghdfe ret_mkt loser lp lp_qtr l_qtr [aw=w_l1], ///
     absorb(permno stata_date) cluster(permno stata_date)
 
 esttab qtramp using "$output\table6_qtr_amplify_vw.tex", replace ///
@@ -235,7 +404,7 @@ esttab qtramp using "$output\table6_qtr_amplify_vw.tex", replace ///
             "\label{tab:qtramp}") ///
     postfoot("\midrule" ///
             "\multicolumn{2}{p{0.95\textwidth}}{\footnotesize \textit{Notes.}" ///
-            "Dependent variable is daily excess return in basis points." ///
+            "Dependent variable is the daily stock return in excess of the risk-free rate ($r_{i,t} - r^f_t$), in basis points." ///
             "Value-weighted. QtrEnd equals one in March, June, September, December." ///
             "A significant Loser $\times$ PreTOM $\times$ QtrEnd would indicate" ///
             "amplification at quarter-ends, consistent with window dressing." ///
@@ -256,7 +425,7 @@ di "{hline 70}"
 
 eststo clear
 
-eststo decjan: reghdfe ret_rf loser lp lp_dec lp_jan l_dec l_jan [aw=w_l1], ///
+eststo decjan: reghdfe ret_mkt loser lp lp_dec lp_jan l_dec l_jan [aw=w_l1], ///
     absorb(permno stata_date) cluster(permno stata_date)
 
 esttab decjan using "$output\table7_decjan_vw.tex", replace ///
@@ -272,7 +441,7 @@ esttab decjan using "$output\table7_decjan_vw.tex", replace ///
             "\label{tab:decjan}") ///
     postfoot("\midrule" ///
             "\multicolumn{2}{p{0.95\textwidth}}{\footnotesize \textit{Notes.}" ///
-            "Dependent variable is daily excess return in basis points." ///
+            "Dependent variable is the daily stock return in excess of the risk-free rate ($r_{i,t} - r^f_t$), in basis points." ///
             "Value-weighted. Dec and Jan are monthly indicator variables." ///
             "All specifications include firm and date fixed effects." ///
             "Standard errors (in parentheses) are two-way clustered by firm and date.}\\" ///
@@ -291,7 +460,7 @@ di "{hline 70}"
 
 eststo clear
 
-eststo exdecjan: reghdfe ret_rf loser lp [aw=w_l1] if notdecjan == 1, ///
+eststo exdecjan: reghdfe ret_mkt loser lp [aw=w_l1] if notdecjan == 1, ///
     absorb(permno stata_date) cluster(permno stata_date)
 
 esttab exdecjan using "$output\table8_exdecjan_vw.tex", replace ///
@@ -307,7 +476,7 @@ esttab exdecjan using "$output\table8_exdecjan_vw.tex", replace ///
             "\label{tab:exdecjan}") ///
     postfoot("\midrule" ///
             "\multicolumn{2}{p{0.95\textwidth}}{\footnotesize \textit{Notes.}" ///
-            "Dependent variable is daily excess return in basis points." ///
+            "Dependent variable is the daily stock return in excess of the risk-free rate ($r_{i,t} - r^f_t$), in basis points." ///
             "Value-weighted. Sample excludes December and January." ///
             "All specifications include firm and date fixed effects." ///
             "Standard errors (in parentheses) are two-way clustered by firm and date.}\\" ///
@@ -327,19 +496,19 @@ di "{hline 70}"
 eststo clear
 
 * (1) Non-QE
-eststo col1: reghdfe ret_rf loser lp [aw=w_l1] if non_qtr == 1, ///
+eststo col1: reghdfe ret_mkt loser lp [aw=w_l1] if non_qtr == 1, ///
     absorb(permno stata_date) cluster(permno stata_date)
 
 * (2) QE interaction
-eststo col2: reghdfe ret_rf loser lp lp_qtr l_qtr [aw=w_l1], ///
+eststo col2: reghdfe ret_mkt loser lp lp_qtr l_qtr [aw=w_l1], ///
     absorb(permno stata_date) cluster(permno stata_date)
 
 * (3) Dec/Jan
-eststo col3: reghdfe ret_rf loser lp lp_dec lp_jan l_dec l_jan [aw=w_l1], ///
+eststo col3: reghdfe ret_mkt loser lp lp_dec lp_jan l_dec l_jan [aw=w_l1], ///
     absorb(permno stata_date) cluster(permno stata_date)
 
 * (4) Ex Dec/Jan
-eststo col4: reghdfe ret_rf loser lp [aw=w_l1] if notdecjan == 1, ///
+eststo col4: reghdfe ret_mkt loser lp [aw=w_l1] if notdecjan == 1, ///
     absorb(permno stata_date) cluster(permno stata_date)
 
 esttab col1 col2 col3 col4 using "$output\table_tax_summary_vw.tex", replace ///
@@ -355,7 +524,7 @@ esttab col1 col2 col3 col4 using "$output\table_tax_summary_vw.tex", replace ///
             "\label{tab:taxsummary}") ///
     postfoot("\midrule" ///
             "\multicolumn{5}{p{0.95\textwidth}}{\footnotesize \textit{Notes.}" ///
-            "Dependent variable is daily excess return in basis points." ///
+            "Dependent variable is the daily stock return in excess of the risk-free rate ($r_{i,t} - r^f_t$), in basis points." ///
             "All specifications are value-weighted with firm and date fixed effects." ///
             "Standard errors (in parentheses) are two-way clustered by firm and date." ///
             "Column 1 restricts to non-quarter-end months." ///
@@ -371,7 +540,7 @@ timer off 1
 timer list 1
 
 di _n "{hline 70}"
-di "DONE — VW tables"
+di "DONE - VW tables"
 di "{hline 70}"
 
 log close

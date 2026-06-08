@@ -16,7 +16,7 @@
 clear all
 set more off
 
-if "$root" == "" global root "C:\Users\danie\Dropbox\Timing Momentum"
+if "$root" == "" global root "."
 global data    "$root/data"
 global output  "$root/output"
 

@@ -1,7 +1,7 @@
 /*==============================================================================
   _fresh_table_gen.do
 
-  Generates paper/Tables/table_fresh.tex from loser_freshstale.csv.
+  Generates output/table_fresh.tex from loser_freshstale.csv.
   Runs all three fresh/stale specifications and writes the formatted table.
 
   Must be called AFTER globals are set (by 00_replicate.do or standalone).
@@ -10,7 +10,7 @@
 clear all
 set more off
 
-if "$root" == "" global root "C:/Users/danie/Dropbox/Timing Momentum"
+if "$root" == "" global root "."
 global data "$root/data"
 global output "$root/output"
 
@@ -114,7 +114,7 @@ di "Dec total: b=" %6.2f `d_tot_b' " (t=" %5.2f `d_tot_t' ")"
 
 * ── Write table_fresh.tex ───────────────────────────────────────────────
 
-local tabfile "$root/paper/Tables/table_fresh.tex"
+local tabfile "$output/table_fresh.tex"
 file open tf using "`tabfile'", write replace
 
 file write tf "\begin{table}[htbp]" _n

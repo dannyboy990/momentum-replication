@@ -29,7 +29,7 @@ keep if yr >= 1980
 gen losers_bps  = losers_vw  * 10000
 gen winners_bps = winners_vw * 10000
 
-* Restrict to t in [-9, 10] — covers full month, drops sparse t=11..13
+* Restrict to t in [-9, 10] - covers full month, drops sparse t=11..13
 keep if t >= -9 & t <= 10
 
 * Collapse to mean and SD by trading day t
@@ -112,7 +112,7 @@ graph export "$output\appendix_daily_decomp.pdf", replace as(pdf)
 graph export "$output\appendix_daily_decomp.png", replace as(png) width(2400)
 
 di _n "{hline 50}"
-di "DONE — Appendix daily decomposition figure"
+di "DONE - Appendix daily decomposition figure"
 di "{hline 50}"
 
 log close

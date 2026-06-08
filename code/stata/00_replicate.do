@@ -1,6 +1,6 @@
 /*==============================================================================
 
-  00_replicate.do — MASTER REPLICATION FILE
+  00_replicate.do - MASTER REPLICATION FILE
 
   "The Intramonth Momentum Cycle"
   Daniel Nathan, Matti Suominen, and Joni Tasa
@@ -57,9 +57,9 @@
   OUTPUT MAP
   ──────────
   Tables  → $output/*.tex (LaTeX) and $output/*.log (full regression output)
-  Figures → $fig/*.pdf and $root/paper/Figures/*.pdf
+  Figures → $fig/*.pdf and $fig/*.pdf
 
-  TABLE/FIGURE → CODE MAPPING  (paper_30_03_26.tex numbering)
+  TABLE/FIGURE → CODE MAPPING  (paper numbering)
   ────────────────────────────────────────────────────────────
   MAIN PAPER:
   Table 1  (Baseline)              → SECTION B, _tables_vw.do
@@ -68,18 +68,18 @@
   Table 4  (Reversal)              → SECTION B, _vw_excrash.do
   Table 5  (Non-Quarter-End)       → SECTION B, _tables_vw.do
   Table 6  (TAQ Selling Pressure)  → SECTION D, _taq_tables.do
-  Table 7  (T+1 Settlement DiD)    → SECTION F, _t1_did_earlymonth_control.do  [hardcoded]
-  Table 8  (T+1 Falsification)     → SECTION F, _settlement_tables.do  [hardcoded in paper]
-  Table 9  (T+3→T+2 DiD)          → SECTION F, _settlement_tables.do  [hardcoded in paper]
+  Table 7  (T+1 Settlement DiD)    → SECTION F, _t1_did_earlymonth_control.do
+  Table 8  (T+1 Falsification)     → SECTION F, _settlement_tables.do
+  Table 9  (T+3→T+2 DiD)          → SECTION F, _settlement_tables.do
   Table 10 (Dividend Gradient)     → SECTION H, _divfreq_pretom_v2.do
   Table 11 (Fresh vs Stale)        → SECTION I, _fresh_table_gen.do
   Table 12 (International)         → SECTION J, _intl_v3_reg.do
   Table A1 (Quarter-End Amp.)      → SECTION B, _tables_vw.do
-  Table A2 (Winner Baseline)       → SECTION B, _tables_vw.do  [hardcoded in paper]
-  Table A3 (S&P 500)               → SECTION G, _sp500_index_rebal.do  [hardcoded in paper]
+  Table A2 (Winner Baseline)       → SECTION B, _tables_vw.do
+  Table A3 (S&P 500)               → SECTION G, _sp500_index_rebal.do
 
   INTERNET APPENDIX:
-  Table IA.1 (Holding Period)      → SECTION K, _jt_holding_mktadj_nw.py  [hardcoded in IA tex]
+  Table IA.1 (Holding Period)      → SECTION K, _jt_holding_mktadj_nw.py
   Table IA.2 (Transaction Costs)   → SECTION C, _transaction_costs_decomp.py
   Table IA.3-4 (Intl All Countries)→ SECTION J, _intl_v3_reg.do
   Table IA.5 (Full Sample 1927+)   → SECTION K, _appendix_fullsample.do
@@ -109,7 +109,7 @@ set matsize 11000
 
 
 * ══════════════════════════════════════════════════════════════════════════════
-*  USER: SET THIS ONE PATH — everything else is derived
+*  USER: SET THIS ONE PATH - everything else is derived
 * ══════════════════════════════════════════════════════════════════════════════
 
 * USER: Set this to the root of the replication package
@@ -172,34 +172,49 @@ if _rc {
 
 
 * ==============================================================================
-*  STEPS 1-2: Verify Python data construction has been run
+*  STEP 1: Verify Python data construction has been run
 *
-*  Before running this file, you must have run:
-*    python src/01_pull_crsp.py      (downloads CRSP from WRDS)
-*    python src/02_build_panel.py    (builds momentum_daily.dta + CSV panels)
+*  Full pipeline (in order):
+*    python pull_data.py    (WRDS pull; verify the queries against your own access first)
+*                           -> data/crsp_daily_ciz.csv
+*                           -> data/crsp_trading_days.csv
+*                           -> data/sp500constituents.csv
+*                           -> data/taq_iid.parquet
+*                           -> data/Prior_2-12_Breakpoints.csv
+*                           -> data/F-F_Research_Data_Factors_daily.csv
+*    python build_panel.py --start-date 1926-01-01
+*                           (Filipp's IA Section 1 pipeline; polars)
+*                           -> data/crsp_fixed_sorting_panel.parquet
+*    python imc.py build    (builds momentum_daily.dta from the panel)
+*                           -> data/momentum_daily.dta
 *
-*  Those scripts produce:
-*    $data/momentum_daily.dta        (~11,500 obs, 1980-2025)
-*    $data/panel_fixed_vw_reg.csv    (~53M obs, VW weights)
-*    $data/panel_fixed_bas_reg.csv   (~46M obs, BAS subset)
-*    $data/panel_fixed_ew_reg.csv    (~53M obs, EW)
-*    $data/taq_panel_2003_2022.csv   (empty placeholder if no TAQ access)
+*  The pre-built stock-level CSVs (panel_fixed_*_reg.csv,
+*  taq_panel_2003_2022.csv) ship with the replication package.
+*
+*  Required files in $data/:
+*    momentum_daily.dta              (~26,000 obs, 1927-2025)
+*    crsp_fixed_sorting_panel.parquet (consumed by imc.py tc/holding)
+*    panel_fixed_vw_reg.csv          (~53M obs, VW weights)
+*    panel_fixed_bas_reg.csv         (~46M obs, BAS subset)
+*    panel_fixed_ew_reg.csv          (~53M obs, EW)
+*    taq_panel_2003_2022.csv         (TAQ Lee-Ready, empty placeholder OK)
 * ==============================================================================
 
-di _n(2) "Verifying data files from Python scripts..."
+di _n(2) "Verifying data files..."
 
 cap confirm file "$data/momentum_daily.dta"
 if _rc {
     di as error "ERROR: momentum_daily.dta not found."
-    di as error "Run:  python src/01_pull_crsp.py"
-    di as error "      python src/02_build_panel.py"
+    di as error "Run, in order:"
+    di as error "  python $root/pull_data.py    (WRDS + Ken French)"
+    di as error "  python $root/build_panel.py --start-date 1926-01-01"
+    di as error "  python $root/imc.py build"
     error 601
 }
 
 cap confirm file "$data/panel_fixed_vw_reg.csv"
 if _rc {
-    di as error "ERROR: panel_fixed_vw_reg.csv not found."
-    di as error "Run:  python src/02_build_panel.py"
+    di as error "ERROR: panel_fixed_vw_reg.csv not found in $data/."
     error 601
 }
 
@@ -219,7 +234,7 @@ di "=================================================================="
 
 
 * ── Figure 1: Cumulative Wealth from Momentum Strategies ─────────────────
-*    Three lines: Window-only ($18.78), Full WML ($45.06), Rest ($2.40)
+*    Three lines: Window-only, Full WML, and Rest-of-month cumulative wealth
 *    Sample: 1980-2025
 
 di _n ">>> Figure 1: Cumulative wealth"
@@ -447,7 +462,7 @@ di "computed from the stock panel via _transaction_costs_decomp.py."
 di "Net WML = Gross WML - TC."
 di ""
 di "Running Python TC decomposition..."
-shell py "$code/_transaction_costs_decomp.py"
+shell python "$root/imc.py" tc --root "$root"
 
 log close
 
@@ -478,7 +493,7 @@ do "$code/_taq_tables.do"
 
 di _n(3) "=================================================================="
 di "  SECTION E: Flow-Induced Selling Pressure / Bartik IV"
-di "  (Not a numbered table in paper — results discussed in text)"
+di "  (Not a numbered table in paper - results discussed in text)"
 di "=================================================================="
 
 *  First stage: Bartik instrument → TAQ net sell pressure
@@ -506,7 +521,7 @@ di "=================================================================="
 *    Panel A: Cell means (early-month [T+5,T+8] control)
 *    Panel B: Portfolio DiD with early-month control, robust SEs
 *    Panel C: Stock-level triple-diff, firm+date FE, VW, clustered by date
-*    Output: log file (numbers hardcoded in paper)
+*    Output: log file
 
 di _n ">>> Table 7: T+1 settlement DiD (early-month control)"
 do "$code/_t1_did_earlymonth_control.do"
@@ -517,7 +532,6 @@ do "$code/_t1_did_earlymonth_control.do"
 *      Placebo days (t=-6 vs t=-7): near zero
 *      Placebo dates (May 2020, May 2018): near zero
 *    Table 9: T+3→T+2 (same t=-4 vs t=-3 pair, event Sep 5 2017)
-*      DiD near zero — mismatch reduced but not eliminated
 
 di _n ">>> Tables 8-9: Settlement falsification + T+2 DiD"
 do "$code/_settlement_tables.do"
@@ -560,7 +574,7 @@ di "=================================================================="
 *  Panel A is descriptive (payer shares computed during CSV construction in
 *  Python; see _divfreq_pretom_v2.py). The CSV only contains quarterly payers.
 *  Panels B+C are produced by _divfreq_pretom_v2.do (three-month split).
-*  The table_dividend_gradient.tex in paper/Tables/ is manually maintained
+*  The table_dividend_gradient.tex in output/ is manually maintained
 *  from these log outputs.
 
 di _n ">>> Table 10: Dividend gradient (Panels A-C)"
@@ -587,7 +601,7 @@ di "=================================================================="
 *    Continuous: PreTOM × fresh_z = -1.77 bps/sd (t=-2.38)
 *    December falsification: gradient vanishes in December
 *
-*    Output: paper/Tables/table_fresh.tex
+*    Output: output/table_fresh.tex
 
 di _n ">>> Fresh vs stale: all specs + table generation"
 do "$code/_fresh_table_gen.do"
@@ -604,7 +618,7 @@ di "  SECTION J: International Evidence (Table 12, IA Tables)"
 di "=================================================================="
 
 *  Table 12 (paper): Pooled + 10 selected countries
-*    Pooled loser-mkt diff = -4.47 bps/day (t=-4.60)
+*    Pooled loser-market difference is negative and statistically significant
 *    Winners show no differential PreTOM concentration (+0.74, t=0.78)
 *  Tables IA.3-4 (internet appendix): All 19 countries, losers and winners
 *
@@ -627,11 +641,11 @@ di "=================================================================="
 
 * ── Table IA.1: Holding Period Analysis ─────────────────────────────────
 *    Varies K from 1 to 12 months; PreTOM significant at 1% for all K
-*    Numbers hardcoded in internet_appendix.tex
+*    Results are reported in the paper.
 *    Underlying computation: Python (overlapping portfolio construction)
 
 di _n ">>> IA Table 1: Holding period analysis (Python)"
-shell py "$code/_jt_holding_mktadj_nw.py"
+shell python "$root/imc.py" holding --root "$root"
 
 
 * ── Table IA.2: Transaction Cost Decomposition ──────────────────────────
@@ -651,38 +665,33 @@ do "$code/_appendix_fullsample.do"
 
 * ══════════════════════════════════════════════════════════════════════════════
 *  COPY GENERATED TABLES TO PAPER DIRECTORY
-*  Some do-files write to $output/, paper reads from paper/Tables/.
-*  Tables written directly to paper/Tables/: table_reversal_vw, table_fresh,
+*  Some do-files write to $output/, paper reads from output/.
+*  Tables written directly to output/: table_reversal_vw, table_fresh,
 *    table_intl (generated in-place by their do-files).
 *  Tables needing copy from $output/:
 * ══════════════════════════════════════════════════════════════════════════════
 
 di _n(3) "=================================================================="
-di "  Copying generated tables to paper/Tables/"
+di "  Copying generated tables to output/"
 di "=================================================================="
 
 * Tables generated by _tables_vw.do (Tables 1, 3, 5, A1)
-cap copy "$output/table1_baseline_vw.tex" "$root/paper/Tables/table1_baseline.tex", replace
-cap copy "$output/table4_subperiod_vw.tex" "$root/paper/Tables/table4_subperiod.tex", replace
-cap copy "$output/table5_nonqtr_vw.tex" "$root/paper/Tables/table5_nonqtr.tex", replace
-cap copy "$output/table6_qtr_amplify_vw.tex" "$root/paper/Tables/table6_qtr_amplify.tex", replace
+cap copy "$output/table1_baseline_vw.tex" "$output/table1_baseline.tex", replace
+cap copy "$output/table4_subperiod_vw.tex" "$output/table4_subperiod.tex", replace
+cap copy "$output/table5_nonqtr_vw.tex" "$output/table5_nonqtr.tex", replace
+cap copy "$output/table6_qtr_amplify_vw.tex" "$output/table6_qtr_amplify.tex", replace
 
 * Table 2 generated by _table2_bas_contemp.do
-cap copy "$output/table2_bas_contemp.tex" "$root/paper/Tables/table2_bas.tex", replace
+cap copy "$output/table2_bas_contemp.tex" "$output/table2_bas.tex", replace
 
-* Table 6 TAQ (paper/Tables/taq_tables_formatted.tex) — verified against log,
-* numbers match. Table maintained in paper/Tables/ directly.
 
-* Table 10 dividend gradient (paper/Tables/table_dividend_gradient.tex) —
-* verified against log. Table maintained in paper/Tables/ directly.
+* Table 10 dividend gradient (output/table_dividend_gradient.tex) -
 
-* Tables 7-9 settlement (hardcoded in paper .tex, not \input)
 
 * Table generated by _appendix_fullsample.do
-cap copy "$output/table_ia_fullsample.tex" "$root/paper/Tables/table_ia_fullsample.tex", replace
+cap copy "$output/table_ia_fullsample.tex" "$output/table_ia_fullsample.tex", replace
 
-* TC decomposition table (paper/Tables/table_tc_decomp.tex) — Python script
-* prints to console in Section C; table maintained in paper/Tables/ directly.
+* TC decomposition table (output/table_tc_decomp.tex) - Python script
 
 di "  Table copy complete."
 
@@ -700,21 +709,11 @@ di "=================================================================="
 di ""
 di "Output directory: $output"
 di "Figures directory: $fig"
-di "Paper figures:     $paperfig"
+di "Paper figures:     $fig"
 di ""
 di "Completed: " c(current_date) " " c(current_time)
 di ""
-di "Verify key numbers against the paper (paper_30_03_26.tex):"
-di "  Table 1:   Loser×PreTOM = -2.550 (EW), -7.151 (VW)"
-di "  Table 2:   Loser×PreTOM×BAS = +30.4 (EW), +58.8 (VW)"
-di "  Table 3:   -5.762 (1980-2002), -8.503 (2002-2025)"
-di "  Table 4:   PreTOM = -5.508, Post = +8.215, reversal p=0.66"
-di "  Table 5:   Non-quarter-end lp = -7.52"
-di "  Table 6:   TAQ Loser×PreTOM NSP = +0.0020 (t=2.50)"
-di "  Table 7:   T+1 DiD (early-month control)"
-di "  Table 10:  Dividend gradient (88% non-payers in D1)"
-di "  Table 11:  Fresh losers -3.30 (t=-2.17), stale +1.24 (t=1.02)"
-di "  Table 12:  Intl pooled loser diff = -4.47 (t=-4.60)"
-di "  Figure 1:  Window $18.78, Rest $2.40, Full $45.06"
+di "Key regression tables are written to $output/ as .tex and .log files."
+di "Compare the reported coefficients against the corresponding tables in the paper."
 
 log close master

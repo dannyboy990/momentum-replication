@@ -3,7 +3,7 @@
 
   Clean figures for T+1 settlement natural experiment.
   Figure 1: Side-by-side bars (pre vs post) at each trading day
-  Figure 2: Two-panel — cumulative loser mkt-adj return within month
+  Figure 2: Two-panel - cumulative loser mkt-adj return within month
 ==============================================================================*/
 
 clear all
@@ -23,7 +23,7 @@ keep if year(date) >= 1980
 
 
 * ══════════════════════════════════════════════════════════════════════════════
-*  FIGURE 1: Grouped bar chart — pre vs post by trading day
+*  FIGURE 1: Grouped bar chart - pre vs post by trading day
 * ══════════════════════════════════════════════════════════════════════════════
 
 preserve

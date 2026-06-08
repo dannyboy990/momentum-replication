@@ -1,10 +1,10 @@
 /*==============================================================================
-  International v3 (NYSE-style breakpoints) — regressions with SEs.
+  International v3 (NYSE-style breakpoints) - regressions with SEs.
   Market-adjusted. Full sample (1990+). 19 developed markets (ex-Japan, ex-Canada).
 ==============================================================================*/
 clear all
 set more off
-if "$root" == "" global root "C:/Users/danie/Dropbox/Timing Momentum"
+if "$root" == "" global root "."
 cap log close
 log using "$root/output/intl_v3_reg.log", replace
 
@@ -43,7 +43,7 @@ foreach c of local countries {
 }
 
 * ==============================================================================
-* POOLED — full sample (19 countries, ex-Japan ex-Canada)
+* POOLED - full sample (19 countries, ex-Japan ex-Canada)
 * ==============================================================================
 di _n "{hline 60}"
 di "POOLED 19 countries (full sample)"
@@ -71,7 +71,7 @@ foreach var in losers_mktadj_bp winners_mktadj_bp wml_bp {
 }
 
 * ==============================================================================
-* POOLED — 2002+
+* POOLED - 2002+
 * ==============================================================================
 di _n "{hline 60}"
 di "POOLED 19 countries (2002+)"
@@ -124,7 +124,7 @@ local name_DEU "Germany"
 local name_AUS "Australia"
 
 * Write table
-local tabfile "$root/paper/Tables/table_intl.tex"
+local tabfile "$output/table_intl.tex"
 file open tf using "`tabfile'", write replace
 file write tf "\begin{table}[htbp]" _n
 file write tf "\centering" _n

@@ -9,7 +9,7 @@
 clear all
 set more off
 
-if "$root" == "" global root "C:\Users\danie\Dropbox\Timing Momentum"
+if "$root" == "" global root "."
 global data    "$root/data"
 global code    "$root/code/stata"
 global output  "$root/output"
@@ -64,10 +64,10 @@ di _n "=== Full sample N obs: " _N " ==="
 
 eststo clear
 
-* (1) EW baseline — full sample
+* (1) EW baseline - full sample
 eststo ew: reghdfe ret_rf loser lp, absorb(permno stata_date) cluster(permno stata_date)
 
-* (3) VW baseline — full sample
+* (3) VW baseline - full sample
 eststo vw: reghdfe ret_rf loser lp [aw=w_l1], absorb(permno stata_date) cluster(permno stata_date)
 
 
@@ -110,10 +110,10 @@ label var ret_rf "Daily excess return (bps)"
 
 di _n "=== BAS subsample N obs: " _N " ==="
 
-* (2) EW + BAS — BAS subsample
+* (2) EW + BAS - BAS subsample
 eststo ew_bas: reghdfe ret_rf loser l_bas lp lp_bas, absorb(permno stata_date) cluster(permno stata_date)
 
-* (4) VW + BAS — BAS subsample
+* (4) VW + BAS - BAS subsample
 eststo vw_bas: reghdfe ret_rf loser l_bas lp lp_bas [aw=w_l1], absorb(permno stata_date) cluster(permno stata_date)
 
 esttab ew ew_bas vw vw_bas using "$output\table2_bas_contemp.tex", replace ///
@@ -146,7 +146,7 @@ timer off 1
 timer list 1
 
 di _n "{hline 70}"
-di "DONE — Table 2 contemporaneous BAS"
+di "DONE - Table 2 contemporaneous BAS"
 di "{hline 70}"
 
 log close

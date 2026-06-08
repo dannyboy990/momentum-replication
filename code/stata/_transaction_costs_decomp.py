@@ -28,7 +28,7 @@ import pyarrow.parquet as pq
 import pandas as pd
 import numpy as np
 
-ROOT = "C:/Users/danie/Dropbox/Timing Momentum"
+ROOT = "."
 
 print("Loading parquet...")
 cols = ['date','PERMNO','decile','return','market_cap_l1','bas','t']

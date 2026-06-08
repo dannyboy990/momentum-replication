@@ -4,7 +4,7 @@
   Figure: Intra-month net flow pressures by momentum decile.
   Bar chart showing net flow pressure (bps) for deciles 1 (losers) to 10 (winners).
 
-  Data from Matti's MF chart data.xlsx.
+  Data from the mutual-fund flow series.
 
   Output: $fig/flow_pressure_chart.pdf
 ==============================================================================*/

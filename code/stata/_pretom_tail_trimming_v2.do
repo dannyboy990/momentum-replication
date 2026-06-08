@@ -1,8 +1,8 @@
 /*==============================================================================
   _pretom_tail_trimming_v2.do
 
-  Panel A: Dot-and-whisker — mean daily WML by window (untrimmed) with CIs
-  Panel B: Line chart — mean daily WML across trimming levels (0,1,5,10%)
+  Panel A: Dot-and-whisker - mean daily WML by window (untrimmed) with CIs
+  Panel B: Line chart - mean daily WML across trimming levels (0,1,5,10%)
 
   Fully B&W friendly.
   Full sample 1980-2025, include December.

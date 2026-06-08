@@ -5,7 +5,7 @@
      during PreTOM window [t-9,t-4] vs rest of month. Full + subperiods.
      SEs from monthly compounded returns (not daily).
 
-  2. December vs non-December loser PreTOM returns — raw AND market-adjusted.
+  2. December vs non-December loser PreTOM returns - raw AND market-adjusted.
      SEs from monthly compounded returns.
 
   Input:  $data\momentum_daily.dta
@@ -41,12 +41,12 @@ gen is_dec = (month_num == 12)
 
 
 /*======================================================================
-  PART 1: Market-adjusted bar charts — Window vs Rest
+  PART 1: Market-adjusted bar charts - Window vs Rest
   Compound daily returns to monthly, then means/SEs across months.
 ======================================================================*/
 
 di _n "{hline 70}"
-di "PART 1: Market-adjusted daily returns (bps) — Window vs Rest"
+di "PART 1: Market-adjusted daily returns (bps) - Window vs Rest"
 di "{hline 70}"
 
 * Market-adjusted daily returns: subtract mktrf from each leg
@@ -215,7 +215,7 @@ graph export "$output\barchart_mktadj_subperiod.png", replace as(png) width(2400
 
 
 /*======================================================================
-  PART 2: December vs non-December loser PreTOM — raw and market-adjusted
+  PART 2: December vs non-December loser PreTOM - raw and market-adjusted
   Monthly compounded returns, SEs across months.
 ======================================================================*/
 

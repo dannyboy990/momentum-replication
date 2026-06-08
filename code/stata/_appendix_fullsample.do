@@ -18,7 +18,7 @@
 clear all
 set more off
 
-if "$root" == "" global root "C:/Users/danie/Dropbox/Timing Momentum"
+if "$root" == "" global root "."
 global data    "$root/data"
 global code    "$root/code/stata"
 global output  "$root/output"
@@ -52,7 +52,7 @@ di "Months: " r(r)
 
 
 /*==============================================================================
-  TABLE: Mean daily returns (bps) — PreTOM vs Rest, three subperiods
+  TABLE: Mean daily returns (bps) - PreTOM vs Rest, three subperiods
 
   Panel A: Raw excess returns (ri - rf)
   Panel B: Market-adjusted returns (ri - rf - mktrf)
@@ -232,7 +232,7 @@ foreach p in 1 2 3 99 {
 
 
 /*==============================================================================
-  MONTHLY COMPOUNDED RETURNS — for t-stats and wealth calculations
+  MONTHLY COMPOUNDED RETURNS - for t-stats and wealth calculations
 ==============================================================================*/
 
 preserve
@@ -292,7 +292,7 @@ foreach lab in "1927-1964" "1965-1989" "1990-2025" "Full 1927-2025" {
 
 
 /*==============================================================================
-  FIGURE: Cumulative WML wealth — full sample (1927-2025)
+  FIGURE: Cumulative WML wealth - full sample (1927-2025)
   Window strategy vs Rest vs Full month
 ==============================================================================*/
 
@@ -349,7 +349,7 @@ restore
 
 
 /*==============================================================================
-  FIGURE: Bar chart — Market-adjusted PreTOM vs Rest, full sample
+  FIGURE: Bar chart - Market-adjusted PreTOM vs Rest, full sample
   Same style as Figure 1 in the paper but for 1927-2025
 ==============================================================================*/
 
@@ -422,7 +422,7 @@ restore
 
 
 /*==============================================================================
-  FIGURE: Bar chart — Market-adjusted PreTOM vs Rest, 1927-1964 only
+  FIGURE: Bar chart - Market-adjusted PreTOM vs Rest, 1927-1964 only
 ==============================================================================*/
 
 preserve

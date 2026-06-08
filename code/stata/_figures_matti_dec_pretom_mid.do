@@ -2,8 +2,8 @@
   _figures_matti_dec_pretom_mid.do
 
   Two-panel whisker bar chart:
-    Panel A: Dec vs Other months — PreTOM [T-9, T-4] loser returns
-    Panel B: Dec vs Other months — Mid-month [t+8, t+13] loser returns
+    Panel A: Dec vs Other months - PreTOM [T-9, T-4] loser returns
+    Panel B: Dec vs Other months - Mid-month [t+8, t+13] loser returns
 
   Each panel: 2 bars with 95% CI whiskers.
   Displacement: Dec losers dip mid-month (tax-loss), not PreTOM.
